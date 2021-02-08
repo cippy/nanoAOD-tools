@@ -20,10 +20,11 @@ class lheWeightsFlattener(Module):
                 ("1","1"), ("1","2"), ("2", "05"), ("2", "1"), ("2", "2")]:
             self.out.branch("scaleWeightMuR%sMuF%s" % varPair, "F")
 
-        # for i in range(self.NumNNPDFWeights):
-        #    self.out.branch("pdfWeightNNPDF%i" % i, "F")
-        self.out.branch("npdfWeightNNPDF", "i")
-        self.out.branch("pdfWeightNNPDF", "F", lenVar="npdfWeightNNPDF")
+        for i in range(self.NumNNPDFWeights):
+            self.out.branch("pdfWeightNNPDF%i" % i, "F")
+        # if saving PDFs/alpha as array
+        #self.out.branch("npdfWeightNNPDF", "i")
+        #self.out.branch("pdfWeightNNPDF", "F", lenVar="npdfWeightNNPDF")
 
         for i in range(self.massGrid, self.maxMassShift+self.massGrid, self.massGrid):
             self.out.branch("massShift%iMeVUp" % i, "F")
@@ -71,9 +72,10 @@ class lheWeightsFlattener(Module):
 
         pdfWeights = []
         for i in range(self.NumNNPDFWeights):
-        #     self.out.fillBranch("pdfWeightNNPDF%i" % i, self.LHEPdfWeight[i])
-            pdfWeights.append(self.LHEPdfWeight[i])
-        self.out.fillBranch("npdfWeightNNPDF", self.NumNNPDFWeights)
+            self.out.fillBranch("pdfWeightNNPDF%i" % i, self.LHEPdfWeight[i])
+        # if saving PDFs/alpha as array
+            # pdfWeights.append(self.LHEPdfWeight[i])
+        #self.out.fillBranch("npdfWeightNNPDF", self.NumNNPDFWeights)
         self.out.fillBranch("pdfWeightNNPDF" , pdfWeights)
 
         return True
