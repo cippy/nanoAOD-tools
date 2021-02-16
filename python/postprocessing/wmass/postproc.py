@@ -82,9 +82,11 @@ parser.add_argument('-runPeriod', '--runPeriod',type=str, default="",    help=""
 parser.add_argument('-genOnly',   '--genOnly',  type=int, default=0,      help="")
 parser.add_argument('-trigOnly',  '--trigOnly', type=int, default=0,      help="")
 parser.add_argument('-iFile',     '--iFile',    type=str, default="",     help="")
+parser.add_argument('-c',         '--compression', type=str , default="LZMA:9" , help="Compression algorithm")
+parser.add_argument(              '--runNoModules',   action='store_true',      help="Do not run any module, it will just reproduce the input (possibly removing branches or changing compression with --compression, for example)")
 parser.add_argument('-doSkim',    '--doSkim',   type=int, choices=[0, 1, 2], default=0,      help="If > 0, run modules for skimming (1=skim for 1 lep space, 2=skim for 2 lep space")
 parser.add_argument('-runOnlySkim',    '--runOnlySkim', action='store_true', help="If using doSkim>0, only the skimming module will be run (useful on postprocessed NanoAOD)")
-parser.add_argument('-noPostfixSkim',    '--noPostfixSkim', action='store_true', help="If using doSkim>0 from postprocessed NanoAOD, do not add '_Skim' as postfix to the output name (it is already present)")
+parser.add_argument('-noPostfixSkim',    '--noPostfixSkim', action='store_true', help="Do not add '_Skim' as postfix to the output name (e.g., when using doSkim >0, as it is already present)")
 parser.add_argument(              '--isTest',   action='store_true',      help="run test modules, hardcoded inside SequenceBuilder.py (will use keep_and_drop_TEST.txt)")
 parser.add_argument('--customKeepDrop',         type=str, default="",     help="use this file for keep-drop")
 parser.add_argument('-o',         '--outDir',   type=str, default=".",    help="output directory")
@@ -97,6 +99,7 @@ parser.add_argument('-t'         , '--runtime'  , type=int , default=43200 , hel
 parser.add_argument('-condorDir' , '--condorDir', type=str , default="", help="Mandatory to run with condor, specify output folder to save condor files, logs, etc...")
 parser.add_argument('-condorSkipFiles' , '--condorSkipFiles', type=str , default="", help="When using condor, can specify a file containing a list of files to be skipped (useful for resubmitting failed jobs)")
 parser.add_argument('-condorSelectFiles' , '--condorSelectFiles', type=str , default="", help="As --condorSkipFiles, but keep only these ones (useful for resubmitting failed jobs)")
+parser.add_argument("-xc", '--executeCondor',   action='store_true',      help="When using condor, submit the command (by default the submit file is only printed on stdout)")
 
 
 args = parser.parse_args()
@@ -201,7 +204,6 @@ if not isMC:
         ifileDATA = "data/Run2018B/DoubleMuon/NANOAOD/Nano1June2019-v1/40000/20FCA3B4-6778-7441-B63C-307A21C7C2F0.root"
 
 input_files = []
-modules = []
 if isMC:
     if inputFile == '' :     #this will run on the hardcoded file above
         input_files.append( input_dir + ifileMC )
@@ -213,12 +215,16 @@ else:
     else : 
         input_files.extend( inputFile.split(',') )
 
-bob=SequenceBuilder(isMC, dataYear, runPeriod, jesUncert, eraVFP, passall, genOnly, 
-                    addOptional=True, 
-                    onlyTestModules=isTest, 
-                    doSkim=args.doSkim, 
-                    runOnlySkim=args.runOnlySkim)
-modules=bob.buildFinalSequence()
+modules = []
+if args.runNoModules:
+    print("INFO >>> Running with no modules") 
+else:
+    bob=SequenceBuilder(isMC, dataYear, runPeriod, jesUncert, eraVFP, passall, genOnly, 
+                        addOptional=True, 
+                        onlyTestModules=isTest, 
+                        doSkim=args.doSkim, 
+                        runOnlySkim=args.runOnlySkim)
+    modules=bob.buildFinalSequence()
 
 # better to use the maxEntries argument of PostProcessor (so that one can use it inside that class)
 #treecut = ("Entry$<" + str(maxEvents) if maxEvents > 0 else None)
@@ -326,6 +332,12 @@ transfer_output_files = ""
             flags += " --runOnlySkim"
         if args.noPostfixSkim:
             flags += " --noPostfixSkim"
+        if args.compression:
+            flags += " --compression {c}".format(c=args.compression)
+        if args.runNoModules:
+            flags += " --runNoModules"
+        if args.customKeepDrop:
+            flags += " --customKeepDrop {kd}".format(kd=args.customKeepDrop)
             
         tmp_condor.write('arguments = {od} {pwd}/postproc.py  --isMC {isMC} --dataYear {y} --passall {pa} {flags} -iFile {files}\n'.format(isMC=isMC,y=dataYear, pa=passall, flags=flags, files=','.join(fs),od=outDir,pwd=os.environ['PWD']))
         tmp_condor.write('''
@@ -336,6 +348,10 @@ Error      = {cd}/log_condor_{dm}{rp}_chunk{ch}.error\n'''.format(cd=args.condor
     tmp_condor.close()
 
     print 'condor submission file made:', tmp_condor_filename
+    if args.executeCondor:
+        print("Executing condor submission file")
+        xcmd = "condor_submit " + tmp_condor_filename
+        os.system(xcmd)
 
 else:
     p = PostProcessor(outputDir=outDir,  
@@ -347,7 +363,7 @@ else:
                       maxEntries=maxEvents if maxEvents>0 else None,
                       fwkJobReport=(False if crab==0 else True),
                       jsonInput=(None if crab==0 else runsAndLumis()),
-                      compression="LZMA:9",
+                      compression=args.compression,
                       saveHistoGenWeights=(True if isMC else False),
                       allowNoPostfix=args.noPostfixSkim
                   )
